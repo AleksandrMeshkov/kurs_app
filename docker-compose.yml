@@ -1,0 +1,29 @@
+services:
+
+  pcstore_api:
+    container_name: kurs_bak
+    build:
+      context: .  
+      dockerfile: Dockerfile.backend
+    restart: always
+    command: ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - .env
+    ports:
+      - ${API_BASE_PORT}:8000
+
+
+  pcstore_database:
+    container_name: kurs_database
+    image: postgres:latest
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - 2811:5432
+    volumes:
+      - /var/lib/postgresql/data
