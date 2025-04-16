@@ -59,7 +59,9 @@ class UserService:
                 Patronymic=request.Patronymic,
                 City=request.City,
                 Phone=request.Phone,
-                PhotoURL=request.PhotoURL
+                PhotoURL =request.PhotoURL
+    
+
             )
             .returning(User)
         )
@@ -72,10 +74,15 @@ class UserService:
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=f"Ошибка при регистрации пользователя: {str(e)}")
 
-    async def update_profile(self, user: User, data: UserUpdate):
+    async def update_profile(self, UserID: int, data: UserUpdate):
         """
         Обновление профиля пользователя.
         """
+        # Проверяем, существует ли пользователь
+        existing_user = await self.get_user_by_id(UserID)
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
         data_dict = data.dict(exclude_unset=True)
 
         update_fields = {}
@@ -86,8 +93,8 @@ class UserService:
         if not update_fields:
             return None
 
-        query = update(User).where(User.UserID == user.UserID).values(update_fields).returning(User)
-
+        query = update(User).where(User.UserID == UserID).values(update_fields).returning(User)
+        
         try:
             result = await self.session.execute(query)
             await self.session.commit()
