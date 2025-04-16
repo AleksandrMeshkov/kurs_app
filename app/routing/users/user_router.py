@@ -9,6 +9,7 @@ from app.security.jwttype import JWTType
 from app.schemas.request.users.user_registration_schema import UserRegistration
 from app.schemas.request.users.user_update_schema import UserUpdate
 from fastapi.security import OAuth2PasswordRequestForm
+from app.security.jwtmanager import get_current_user
 
 router = APIRouter()
 
@@ -45,29 +46,20 @@ async def login(
     access_token = jwt_manager.create_token(user.UserID, JWTType.ACCESS)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/users/{user_id}")
-async def get_user(
-    user_id: int,
-    session: AsyncSession = Depends(get_session)
-):
-    user_service = UserService(session)
-
-    # Получаем пользователя по ID
-    user = await user_service.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+@router.get("/me")
+async def get_user(user: User = Depends(get_current_user)):
     return user
 
-@router.put("/users/{user_id}")
+@router.put("/update_profile")
 async def update_user(
-    user_id: int,
     request: UserUpdate,  # Принимаем данные в виде объекта UserUpdate
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
 ):
     user_service = UserService(session)
 
     # Обновляем данные пользователя
-    user = await user_service.update_profile(user_id, request)
-    if not user:
+    updated_user = await user_service.update_profile(user.id, request)
+    if not updated_user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User updated successfully"}
