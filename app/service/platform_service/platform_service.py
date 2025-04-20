@@ -4,6 +4,7 @@ from app.schemas.request.platform.platform_schemas import PlatformCreate, Platfo
 from sqlalchemy import select, insert, update, delete
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 
 class PlatformService:
     def __init__(self, session: AsyncSession):
@@ -16,6 +17,14 @@ class PlatformService:
         query = select(Platform).where(Platform.PlatformID == platform_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def get_all_platforms(self) -> List[Platform]:
+        """
+        Получить все площадки.
+        """
+        query = select(Platform)
+        result = await self.session.execute(query)
+        return result.scalars().all()
 
     async def create_platform(self, request: PlatformCreate):
         """

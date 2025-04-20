@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from app.models.models import Event
 from app.schemas.request.events.events_schemas import EventCreate, EventUpdate, EventResponse
+from typing import List
 
 class EventService:
     def __init__(self, session: AsyncSession):
@@ -16,6 +17,13 @@ class EventService:
         query = select(Event).where(Event.EventID == event_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def get_all_events(self) -> List[Event]:
+        """
+        Получение всех событий
+        """
+        result = await self.session.execute(select(Event))
+        return result.scalars().all()
 
     async def create_event(self, request: EventCreate) -> Event:
         """

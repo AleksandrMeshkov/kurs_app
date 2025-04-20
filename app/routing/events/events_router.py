@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import get_session
 from app.service.events_service.events_service import EventService
 from app.schemas.request.events.events_schemas import EventCreate, EventUpdate, EventResponse
+from typing import List
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -10,6 +11,12 @@ router = APIRouter(prefix="/events", tags=["Events"])
 async def create_event(event: EventCreate, session: AsyncSession = Depends(get_session)):
     service = EventService(session)
     return await service.create_event(event)
+
+@router.get("/", response_model=List[EventResponse])  
+async def get_all_events(session: AsyncSession = Depends(get_session)):
+    service = EventService(session)
+    events = await service.get_all_events()
+    return events
 
 @router.get("/{event_id}", response_model=EventResponse)
 async def get_event(event_id: int, session: AsyncSession = Depends(get_session)):

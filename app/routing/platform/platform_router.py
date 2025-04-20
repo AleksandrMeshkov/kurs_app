@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import get_session
 from app.service.platform_service.platform_service import PlatformService
 from app.schemas.request.platform.platform_schemas import PlatformCreate, PlatformUpdate, PlatformResponse
+from typing import List
 
 router = APIRouter(prefix="/platform", tags=["Platforms"])  # Исправлено на "Platforms"
 
@@ -28,3 +29,9 @@ async def update_platform(platform_id: int, platform: PlatformUpdate, session: A
 async def delete_platform(platform_id: int, session: AsyncSession = Depends(get_session)):
     service = PlatformService(session)
     return await service.delete_platform(platform_id)
+
+@router.get("/", response_model=List[PlatformResponse])
+async def get_all_platforms(session: AsyncSession = Depends(get_session)):
+    service = PlatformService(session)
+    platforms = await service.get_all_platforms()
+    return platforms
