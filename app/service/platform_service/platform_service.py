@@ -38,7 +38,7 @@ class PlatformService:
                 Name=request.Name,
                 City=request.City,
                 Address=request.Address,
-                Image=request.Image,  # Store the filename in the database
+                Image=request.Image,
                 Latitude=request.Latitude,
                 Longitude=request.Longitude
             )
@@ -50,13 +50,9 @@ class PlatformService:
             await self.session.commit()
             return result.scalars().first()
         except Exception as e:
-            # If there's an error, delete the uploaded file
-            if hasattr(request, 'Image') and request.Image:
-                file_path = os.path.join("uploads", request.Image)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=f"Ошибка при создании площадки: {str(e)}")
+
 
     async def update_platform(self, platform_id: int, data: PlatformUpdate):
         """
