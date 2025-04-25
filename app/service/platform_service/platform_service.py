@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.models import Platform
 from typing import Optional
+from app.schemas.request.platform.platform_schemas import PlatformCreateRequest
 
 class PlatformService:
     def __init__(self, session: AsyncSession):
@@ -53,11 +54,7 @@ class PlatformService:
 
     async def create_platform(
         self,
-        name: str,
-        city: str,
-        address: str,
-        latitude: float,
-        longitude: float,
+        platform_data: PlatformCreateRequest,
         image: UploadFile
     ) -> Platform:
         """Создает новую площадку с изображением"""
@@ -65,11 +62,11 @@ class PlatformService:
             image_filename = await self._save_image(image)
 
             platform = Platform(
-                Name=name,
-                City=city,
-                Address=address,
-                Latitude=latitude,
-                Longitude=longitude,
+                Name=platform_data.Name,
+                City=platform_data.City,
+                Address=platform_data.Address,
+                Latitude=platform_data.Latitude,
+                Longitude=platform_data.Longitude,
                 Image=image_filename
             )
 
@@ -118,11 +115,7 @@ class PlatformService:
     async def update_platform(
         self,
         platform_id: int,
-        name: Optional[str] = None,
-        city: Optional[str] = None,
-        address: Optional[str] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
+        platform_data: dict,
         image: Optional[UploadFile] = None
     ) -> Platform:
         """Обновляет информацию о площадке"""
@@ -135,16 +128,16 @@ class PlatformService:
                 platform.Image = await self._save_image(image)
 
             # Обновляем остальные поля
-            if name is not None:
-                platform.Name = name
-            if city is not None:
-                platform.City = city
-            if address is not None:
-                platform.Address = address
-            if latitude is not None:
-                platform.Latitude = latitude
-            if longitude is not None:
-                platform.Longitude = longitude
+            if platform_data.get("Name") is not None:
+                platform.Name = platform_data["Name"]
+            if platform_data.get("City") is not None:
+                platform.City = platform_data["City"]
+            if platform_data.get("Address") is not None:
+                platform.Address = platform_data["Address"]
+            if platform_data.get("Latitude") is not None:
+                platform.Latitude = platform_data["Latitude"]
+            if platform_data.get("Longitude") is not None:
+                platform.Longitude = platform_data["Longitude"]
 
             await self.session.commit()
             await self.session.refresh(platform)

@@ -27,8 +27,13 @@ async def create_platform(
     )
     platform = await service.create_platform(platform_data, image)
     return PlatformResponse(
-        **platform.__dict__,
-        ImageUrl=f"/uploads/{platform.Image}" if platform.Image else None
+        PlatformID=platform.PlatformID,
+        Name=platform.Name,
+        City=platform.City,
+        Address=platform.Address,
+        Latitude=platform.Latitude,
+        Longitude=platform.Longitude,
+        ImageUrl=f"http://212.20.53.169:13299/uploads/{platform.Image}" if platform.Image else None
     )
 
 @router.get("/{platform_id}", response_model=PlatformResponse)
@@ -39,8 +44,13 @@ async def get_platform(
     service = PlatformService(session)
     platform = await service.get_platform(platform_id)
     return PlatformResponse(
-        **platform.__dict__,
-        ImageUrl=f"/uploads/{platform.Image}" if platform.Image else None
+        PlatformID=platform.PlatformID,
+        Name=platform.Name,
+        City=platform.City,
+        Address=platform.Address,
+        Latitude=platform.Latitude,
+        Longitude=platform.Longitude,
+        ImageUrl=f"http://212.20.53.169:13299/uploads/{platform.Image}" if platform.Image else None
     )
 
 @router.get("/", response_model=List[PlatformResponse])
@@ -49,8 +59,13 @@ async def get_all_platforms(session: AsyncSession = Depends(get_session)):
     platforms = await service.get_all_platforms()
     return [
         PlatformResponse(
-            **p.__dict__,
-            ImageUrl=f"/uploads/{p.Image}" if p.Image else None
+            PlatformID=p.PlatformID,
+            Name=p.Name,
+            City=p.City,
+            Address=p.Address,
+            Latitude=p.Latitude,
+            Longitude=p.Longitude,
+            ImageUrl=f"http://212.20.53.169:13299/uploads/{p.Image}" if p.Image else None
         )
         for p in platforms
     ]
@@ -76,8 +91,13 @@ async def update_platform(
     }
     platform = await service.update_platform(platform_id, platform_data, image)
     return PlatformResponse(
-        **platform.__dict__,
-        ImageUrl=f"/uploads/{platform.Image}" if platform.Image else None
+        PlatformID=platform.PlatformID,
+        Name=platform.Name,
+        City=platform.City,
+        Address=platform.Address,
+        Latitude=platform.Latitude,
+        Longitude=platform.Longitude,
+        ImageUrl=f"http://212.20.53.169:13299/uploads/{platform.Image}" if platform.Image else None
     )
 
 @router.delete("/{platform_id}")
