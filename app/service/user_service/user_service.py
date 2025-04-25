@@ -1,127 +1,189 @@
-from typing import Union
+import os
+import uuid
+from fastapi import UploadFile, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, insert
 from app.models.models import User
-from app.schemas.request.users.user_auth_schema import UserAuth
-from app.schemas.request.users.user_registration_schema import UserRegistration
-from app.schemas.request.users.user_update_schema import UserUpdate
-from app.database.database import *
-from app.security.hasher import hash_password
-from app.security.hasher import verify_password
-from sqlalchemy import select, insert, update
-from fastapi import HTTPException
+from typing import Union, Optional
+from pathlib import Path
+from app.security.hasher import hash_password, verify_password
 
 class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.upload_dir = "uploads/users"
+        os.makedirs(self.upload_dir, exist_ok=True)
 
-    async def get_profile(self, **kwargs):
-        query = select(User).filter_by(**kwargs)
-        result = await self.session.execute(query)
-        return result.scalars().first()
+    async def _save_image(self, file: UploadFile) -> str:
+        """Сохраняет изображение на сервере и возвращает имя файла"""
+        if not file.content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Поддерживаются только изображения"
+            )
 
-    async def get_user_by_login(self, login: str) -> Union[User, None]:
-        """
-        Получить пользователя по логину.
-        """
-        query = select(User).where(User.Login == login)
-        result = await self.session.execute(query)
-        return result.scalars().first()
+        try:
+            # Генерируем уникальное имя файла
+            file_ext = Path(file.filename).suffix
+            filename = f"{uuid.uuid4()}{file_ext}"
+            file_path = os.path.join(self.upload_dir, filename)
+
+            # Сохраняем файл
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+            return filename
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при сохранении изображения: {str(e)}"
+            )
+
+    async def _delete_image(self, filename: str):
+        """Удаляет файл изображения"""
+        if filename:
+            try:
+                file_path = os.path.join(self.upload_dir, filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Ошибка при удалении изображения: {str(e)}"
+                )
 
     async def get_user_by_id(self, user_id: int) -> Union[User, None]:
-        """
-        Получить пользователя по ID.
-        """
-        query = select(User).where(User.UserID == user_id)
-        result = await self.session.execute(query)
-        return result.scalars().first()
-
-    async def register(self, request: UserRegistration):
-        """
-        Регистрация нового пользователя.
-        """
-        # Проверяем, существует ли пользователь с таким логином
-        existing_user_by_login = await self.get_user_by_login(request.Login)
-        if existing_user_by_login:
-            raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
-
-        # Проверяем, существует ли пользователь с таким email
-        existing_user_by_email = await self.get_profile(Email=request.Email)
-        if existing_user_by_email:
-            raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
-
-        query = (
-            insert(User)
-            .values(
-                Login=request.Login,
-                Email=request.Email,
-                PasswordHash=hash_password(request.PasswordHash),  # Хэшируем пароль
-                Name=request.Name,
-                Surname=request.Surname,
-                Patronymic=request.Patronymic,
-                City=request.City,
-                Phone=request.Phone,
-                PhotoURL =request.PhotoURL
-    
-
-            )
-            .returning(User)
-        )
-
+        """Получает пользователя по ID"""
         try:
-            result = await self.session.execute(query)
-            await self.session.commit()
+            result = await self.session.execute(select(User).where(User.UserID == user_id))
             return result.scalars().first()
         except Exception as e:
-            await self.session.rollback()
-            raise HTTPException(status_code=500, detail=f"Ошибка при регистрации пользователя: {str(e)}")
-
-    async def update_profile(self, UserID: int, data: UserUpdate):
-        """
-        Обновление профиля пользователя.
-        """
-        # Проверяем, существует ли пользователь
-        existing_user = await self.get_user_by_id(UserID)
-        if not existing_user:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-        data_dict = data.dict(exclude_unset=True)
-
-        update_fields = {}
-        for key, value in data_dict.items():
-            if value is not None:
-                update_fields[key] = value
-
-        if not update_fields:
-            return None
-
-        query = update(User).where(User.UserID == UserID).values(update_fields).returning(User)
-        
-        try:
-            result = await self.session.execute(query)
-            await self.session.commit()
-            return result.scalars().first()
-        except Exception as e:
-            await self.session.rollback()
-            raise HTTPException(status_code=500, detail=f"Ошибка при обновлении профиля: {str(e)}")
-
-    async def authorize(self, Login: str, PasswordHash: str):
-        """
-        Авторизация пользователя.
-        """
-        authenticated = await self.authenticate_user(Login, PasswordHash)
-        if isinstance(authenticated, str):
             raise HTTPException(
-                status_code=401,
-                detail="Неправильный логин или пароль"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при получении пользователя: {str(e)}"
             )
-        return authenticated
 
-    async def authenticate_user(self, Login: str, PasswordHash: str) -> Union[User, str]:
-        """
-        Аутентификация пользователя.
-        """
-        user = await self.get_user_by_login(Login)
-        if not user:
-            return "User not found"
-        if not verify_password(PasswordHash, user.PasswordHash):
-            return "Invalid password"
-        return user
+    async def get_user_by_login(self, login: str) -> Union[User, None]:
+        """Получает пользователя по логину"""
+        try:
+            result = await self.session.execute(select(User).where(User.Login == login))
+            return result.scalars().first()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при получении пользователя: {str(e)}"
+            )
+
+    async def register_user(self, user_data: dict, image: Optional[UploadFile] = None) -> User:
+        """Регистрация нового пользователя"""
+        try:
+            # Проверка уникальности логина
+            existing_user = await self.get_user_by_login(user_data["Login"])
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Пользователь с таким логином уже существует"
+                )
+
+            # Обработка изображения
+            photo_url = None
+            if image:
+                filename = await self._save_image(image)
+                photo_url = f"/uploads/users/{filename}"
+
+            # Хеширование пароля
+            hashed_password = hash_password(user_data["PasswordHash"])
+
+            # Создание пользователя
+            user = User(
+                Login=user_data["Login"],
+                PasswordHash=hashed_password,
+                Email=user_data["Email"],
+                Name=user_data["Name"],
+                Surname=user_data["Surname"],
+                Patronymic=user_data.get("Patronymic"),
+                City=user_data.get("City"),
+                Phone=user_data.get("Phone"),
+                PhotoURL=photo_url
+            )
+
+            self.session.add(user)
+            await self.session.commit()
+            await self.session.refresh(user)
+            return user
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при регистрации пользователя: {str(e)}"
+            )
+
+    async def update_profile(
+        self,
+        user_id: int,
+        update_data: dict,
+        image: Optional[UploadFile] = None
+    ) -> User:
+        """Обновляет профиль пользователя"""
+        try:
+            user = await self.get_user_by_id(user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Пользователь не найден"
+                )
+
+            # Обработка изображения
+            if image:
+                filename = await self._save_image(image)
+                update_data["PhotoURL"] = f"/uploads/users/{filename}"
+                
+                # Удаляем старое фото, если оно есть
+                if user.PhotoURL:
+                    old_file = user.PhotoURL.split('/')[-1]
+                    old_path = os.path.join(self.upload_dir, old_file)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+
+            # Обновление пароля (если передан)
+            if "PasswordHash" in update_data:
+                update_data["PasswordHash"] = hash_password(update_data["PasswordHash"])
+
+            # Обновляем только переданные поля
+            for key, value in update_data.items():
+                if value is not None:
+                    setattr(user, key, value)
+
+            await self.session.commit()
+            await self.session.refresh(user)
+            return user
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при обновлении профиля: {str(e)}"
+            )
+
+    async def authenticate_user(self, login: str, password: str) -> Union[User, None]:
+        """Аутентификация пользователя"""
+        try:
+            user = await self.get_user_by_login(login)
+            if not user:
+                return None
+            
+            if not verify_password(password, user.PasswordHash):
+                return None
+                
+            return user
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при аутентификации: {str(e)}"
+            )
