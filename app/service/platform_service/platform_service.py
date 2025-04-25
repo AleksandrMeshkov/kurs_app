@@ -5,6 +5,8 @@ from sqlalchemy import select, insert, update, delete
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+import os
+import uuid
 
 class PlatformService:
     def __init__(self, session: AsyncSession):
@@ -36,7 +38,7 @@ class PlatformService:
                 Name=request.Name,
                 City=request.City,
                 Address=request.Address,
-                Image=request.Image,
+                Image=request.Image,  # Store the filename in the database
                 Latitude=request.Latitude,
                 Longitude=request.Longitude
             )
@@ -48,6 +50,11 @@ class PlatformService:
             await self.session.commit()
             return result.scalars().first()
         except Exception as e:
+            # If there's an error, delete the uploaded file
+            if hasattr(request, 'Image') and request.Image:
+                file_path = os.path.join("uploads", request.Image)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=f"Ошибка при создании площадки: {str(e)}")
 
@@ -60,6 +67,14 @@ class PlatformService:
             raise HTTPException(status_code=404, detail="Площадка не найдена")
 
         data_dict = data.dict(exclude_unset=True)
+
+        # Handle image update
+        if 'Image' in data_dict and data_dict['Image']:
+            # Delete old image if it exists
+            if existing_platform.Image:
+                old_file_path = os.path.join("uploads", existing_platform.Image)
+                if os.path.exists(old_file_path):
+                    os.remove(old_file_path)
 
         update_fields = {}
         for key, value in data_dict.items():
@@ -86,6 +101,12 @@ class PlatformService:
         existing_platform = await self.get_platform_by_id(platform_id)
         if not existing_platform:
             raise HTTPException(status_code=404, detail="Площадка не найдена")
+
+        # Delete associated image file
+        if existing_platform.Image:
+            file_path = os.path.join("uploads", existing_platform.Image)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
         query = delete(Platform).where(Platform.PlatformID == platform_id)
         
