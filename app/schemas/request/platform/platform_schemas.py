@@ -6,7 +6,7 @@ class PlatformCreate(BaseModel):
     Name: str
     City: str
     Address: str
-    Image: UploadFile
+    Image: str
     Latitude: float
     Longitude: float
 
@@ -14,7 +14,7 @@ class PlatformUpdate(BaseModel):
     Name: str = None
     City: str = None
     Address: str = None
-    Image: Optional[UploadFile] = None
+    Image: str = None
     Latitude: float = None
     Longitude: float = None
 
