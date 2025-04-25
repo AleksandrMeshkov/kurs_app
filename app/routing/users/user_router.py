@@ -77,11 +77,10 @@ async def update_user(
         "Phone": phone
     }
     
-    # Удаляем None-значения
     update_data = {k: v for k, v in update_data.items() if v is not None}
 
     try:
-        user = await service.update_profile(user_id, update_data, image)
+        user = await service.update_user_with_photo(user_id, update_data, image)
         return UserResponse(
             UserID=user.UserID,
             Login=user.Login,
@@ -91,7 +90,7 @@ async def update_user(
             Patronymic=user.Patronymic,
             City=user.City,
             Phone=user.Phone,
-            PhotoURL=f"http://212.20.53.169:13299/uploads/users/{user.PhotoURL.split('/')[-1]}" if user.PhotoURL else None
+            PhotoURL=f"http://your-server-domain/uploads/users/{user.PhotoURL.split('/')[-1]}" if user.PhotoURL else None
         )
     except HTTPException as e:
         raise e

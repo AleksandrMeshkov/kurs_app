@@ -16,24 +16,24 @@ class UserService:
 
     async def _save_image(self, file: UploadFile) -> str:
         """Сохраняет изображение на сервере и возвращает имя файла"""
-        if not file.content_type.startswith("image/"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Поддерживаются только изображения"
-            )
-
         try:
-            # Генерируем уникальное имя файла
+            if not file.content_type.startswith("image/"):
+                raise ValueError("Поддерживаются только изображения")
+
             file_ext = Path(file.filename).suffix
             filename = f"{uuid.uuid4()}{file_ext}"
             file_path = os.path.join(self.upload_dir, filename)
 
-            # Сохраняем файл
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
 
             return filename
+        except ValueError as ve:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(ve)
+            )
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -42,16 +42,16 @@ class UserService:
 
     async def _delete_image(self, filename: str):
         """Удаляет файл изображения"""
-        if filename:
-            try:
+        try:
+            if filename:
                 file_path = os.path.join(self.upload_dir, filename)
                 if os.path.exists(file_path):
                     os.remove(file_path)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Ошибка при удалении изображения: {str(e)}"
-                )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при удалении изображения: {str(e)}"
+            )
 
     async def get_user_by_id(self, user_id: int) -> Union[User, None]:
         """Получает пользователя по ID"""
@@ -78,24 +78,17 @@ class UserService:
     async def register_user(self, user_data: dict, image: Optional[UploadFile] = None) -> User:
         """Регистрация нового пользователя"""
         try:
-            # Проверка уникальности логина
             existing_user = await self.get_user_by_login(user_data["Login"])
             if existing_user:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Пользователь с таким логином уже существует"
-                )
+                raise ValueError("Пользователь с таким логином уже существует")
 
-            # Обработка изображения
             photo_url = None
             if image:
                 filename = await self._save_image(image)
                 photo_url = f"/uploads/users/{filename}"
 
-            # Хеширование пароля
             hashed_password = hash_password(user_data["PasswordHash"])
 
-            # Создание пользователя
             user = User(
                 Login=user_data["Login"],
                 PasswordHash=hashed_password,
@@ -113,7 +106,14 @@ class UserService:
             await self.session.refresh(user)
             return user
 
+        except ValueError as ve:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(ve)
+            )
         except HTTPException:
+            await self.session.rollback()
             raise
         except Exception as e:
             await self.session.rollback()
@@ -128,32 +128,23 @@ class UserService:
         update_data: dict,
         image: Optional[UploadFile] = None
     ) -> User:
-        """Обновляет профиль пользователя"""
+        """Обновляет профиль пользователя с фото"""
         try:
             user = await self.get_user_by_id(user_id)
             if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Пользователь не найден"
-                )
+                raise ValueError("Пользователь не найден")
 
-            # Обработка изображения
             if image:
                 filename = await self._save_image(image)
                 update_data["PhotoURL"] = f"/uploads/users/{filename}"
                 
-                # Удаляем старое фото, если оно есть
                 if user.PhotoURL:
                     old_file = user.PhotoURL.split('/')[-1]
-                    old_path = os.path.join(self.upload_dir, old_file)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
+                    await self._delete_image(old_file)
 
-            # Обновление пароля (если передан)
             if "PasswordHash" in update_data:
                 update_data["PasswordHash"] = hash_password(update_data["PasswordHash"])
 
-            # Обновляем только переданные поля
             for key, value in update_data.items():
                 if value is not None:
                     setattr(user, key, value)
@@ -162,7 +153,15 @@ class UserService:
             await self.session.refresh(user)
             return user
 
+        except ValueError as ve:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND if "не найден" in str(ve) 
+                else status.HTTP_400_BAD_REQUEST,
+                detail=str(ve)
+            )
         except HTTPException:
+            await self.session.rollback()
             raise
         except Exception as e:
             await self.session.rollback()

@@ -9,7 +9,6 @@ class UserUpdate(BaseModel):
     Patronymic: Optional[str] = None
     City: Optional[str] = None
     Phone: Optional[str] = None
-    PhotoURL: Optional[str] = None 
 
 class UserResponse(BaseModel):
     UserID: int
