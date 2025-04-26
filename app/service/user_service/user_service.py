@@ -16,6 +16,7 @@ from pathlib import Path
 class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.BASE_URL = "http://212.20.53.169:13299"  # Базовый URL для формирования полных путей
 
     async def get_profile(self, **kwargs):
         query = select(User).filter_by(**kwargs)
@@ -44,6 +45,11 @@ class UserService:
         if existing_user_by_email:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
+        # Если есть PhotoURL в запросе, формируем полный URL
+        photo_url = request.PhotoURL
+        if photo_url and not photo_url.startswith(('http://', 'https://')):
+            photo_url = f"{self.BASE_URL}/uploads/{photo_url}"
+
         query = (
             insert(User)
             .values(
@@ -55,7 +61,7 @@ class UserService:
                 Patronymic=request.Patronymic,
                 City=request.City,
                 Phone=request.Phone,
-                PhotoURL=request.PhotoURL
+                PhotoURL=photo_url
             )
             .returning(User)
         )
@@ -78,7 +84,8 @@ class UserService:
         if photo_file:
             try:
                 file_name = await self.save_uploaded_file(photo_file)
-                data['PhotoURL'] = file_name
+                # Сохраняем полный URL в базу данных
+                data['PhotoURL'] = f"{self.BASE_URL}/uploads/{file_name}"
             except HTTPException as e:
                 raise e
             except Exception as e:
@@ -102,13 +109,7 @@ class UserService:
         try:
             result = await self.session.execute(query)
             await self.session.commit()
-            updated_user = result.scalars().first()
-            
-            # Формируем полный URL для фото, если оно есть
-            if updated_user.PhotoURL:
-                updated_user.PhotoURL = f"http://212.20.53.169:13299/uploads/{updated_user.PhotoURL}"
-            
-            return updated_user
+            return result.scalars().first()
         except Exception as e:
             await self.session.rollback()
             raise HTTPException(
