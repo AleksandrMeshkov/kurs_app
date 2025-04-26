@@ -7,7 +7,7 @@ from app.database.database import *
 from app.security.hasher import hash_password
 from app.security.hasher import verify_password
 from sqlalchemy import select, insert, update
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, UploadFile, status
 import os
 import uuid
 from fastapi.responses import JSONResponse
@@ -68,11 +68,24 @@ class UserService:
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=f"Ошибка при регистрации пользователя: {str(e)}")
 
-    async def update_profile(self, UserID: int, data: Dict[str, Any]):
-        """Обновление профиля пользователя."""
+    async def update_profile(self, UserID: int, data: Dict[str, Any], photo_file: UploadFile = None):
+        """Обновление профиля пользователя с возможной загрузкой фото."""
         existing_user = await self.get_user_by_id(UserID)
         if not existing_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        # Обработка загружаемого файла
+        if photo_file:
+            try:
+                file_name = await self.save_uploaded_file(photo_file)
+                data['PhotoURL'] = file_name
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Ошибка при обработке файла: {str(e)}"
+                )
 
         # Если передается пароль, хэшируем его
         if 'Password' in data and data['Password'] is not None:
@@ -89,10 +102,19 @@ class UserService:
         try:
             result = await self.session.execute(query)
             await self.session.commit()
-            return result.scalars().first()
+            updated_user = result.scalars().first()
+            
+            # Формируем полный URL для фото, если оно есть
+            if updated_user.PhotoURL:
+                updated_user.PhotoURL = f"http://212.20.53.169:13299/uploads/{updated_user.PhotoURL}"
+            
+            return updated_user
         except Exception as e:
             await self.session.rollback()
-            raise HTTPException(status_code=500, detail=f"Ошибка при обновлении профиля: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Ошибка при обновлении профиля: {str(e)}"
+            )
 
     async def authorize(self, Login: str, PasswordHash: str):
         """Авторизация пользователя."""
@@ -117,12 +139,25 @@ class UserService:
     async def save_uploaded_file(file: UploadFile, upload_dir: str = "uploads") -> str:
         """Сохраняет загруженный файл в указанную директорию."""
         # Проверяем и создаем директорию при необходимости
-        Path(upload_dir).mkdir(parents=True, exist_ok=True)
+        upload_path = Path(upload_dir)
+        upload_path.mkdir(parents=True, exist_ok=True)
         
         # Генерируем уникальное имя файла с сохранением расширения
-        file_ext = Path(file.filename).suffix if file.filename else ""
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Имя файла отсутствует"
+            )
+        
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in ['.png', '.jpg', '.jpeg', '.gif']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Неподдерживаемый формат файла"
+            )
+        
         file_name = f"{uuid.uuid4()}{file_ext}"
-        file_path = Path(upload_dir) / file_name
+        file_path = upload_path / file_name
         
         # Сохраняем файл
         try:
@@ -132,6 +167,6 @@ class UserService:
             return file_name
         except Exception as e:
             raise HTTPException(
-                status_code=500,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Ошибка при сохранении файла: {str(e)}"
             )

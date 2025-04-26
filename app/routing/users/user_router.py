@@ -67,25 +67,30 @@ async def get_user(
 async def update_user(
     user_id: int,
     request: UserUpdate = Depends(),
-    photo_url: UploadFile = File(None, alias="PhotoURL"),  # Изменено имя параметра на PhotoURL
+    photo_file: UploadFile = File(None),
     session: AsyncSession = Depends(get_session)
 ):
     user_service = UserService(session)
     
-    # Если передано изображение, сохраняем его
-    if photo_url:
+    update_data = request.dict(exclude_unset=True)
+    
+    # Обработка загрузки файла
+    if photo_file:
         try:
-            file_name = await UserService.save_uploaded_file(photo_url)
-            # Создаем словарь с обновленными данными
-            update_data = request.dict(exclude_unset=True)
+            # Сохраняем файл
+            file_name = await UserService.save_uploaded_file(photo_file)
+            # Обновляем поле PhotoURL в данных для обновления
             update_data["PhotoURL"] = file_name
+            
+            # Формируем полный URL для ответа
+            photo_url = f"http://212.20.53.169:13299/uploads/{file_name}"
         except Exception as e:
             return JSONResponse(
                 status_code=500,
                 content={"message": f"Ошибка при загрузке файла: {str(e)}"}
             )
     else:
-        update_data = request.dict(exclude_unset=True)
+        photo_url = None
     
     # Обновляем данные пользователя
     user = await user_service.update_profile(user_id, update_data)
@@ -94,5 +99,5 @@ async def update_user(
     
     return {
         "message": "User updated successfully",
-        "photo_url": f"http://212.20.53.169:13299/uploads/{user.PhotoURL}" if user.PhotoURL else None
+        "photo_url": photo_url
     }
