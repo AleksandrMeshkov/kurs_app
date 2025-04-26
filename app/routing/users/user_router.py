@@ -19,17 +19,15 @@ router = APIRouter()
 
 @router.post("/register")
 async def register(
-    request: UserRegistration,  # Принимаем данные в виде объекта UserRegistration
+    request: UserRegistration,
     session: AsyncSession = Depends(get_session)
 ):
     user_service = UserService(session)
 
-    # Проверяем, существует ли пользователь с таким логином
     existing_user = await user_service.get_user_by_login(request.Login)
     if existing_user:
         raise HTTPException(status_code=400, detail="Login already registered")
 
-    # Регистрируем пользователя
     user = await user_service.register(request)
     return {"message": "User created successfully", "user_id": user.UserID}
 
@@ -40,12 +38,10 @@ async def login(
 ):
     user_service = UserService(session)
 
-    # Аутентифицируем пользователя
     user = await user_service.authenticate_user(form_data.username, form_data.password)
-    if isinstance(user, str):  # Если возвращается строка, это ошибка
+    if isinstance(user, str):
         raise HTTPException(status_code=400, detail=user)
 
-    # Создаём JWT-токен
     jwt_manager = JWTManager()
     access_token = jwt_manager.create_token(user.UserID, JWTType.ACCESS)
     return {"access_token": access_token, "token_type": "bearer"}
@@ -57,7 +53,6 @@ async def get_user(
 ):
     user_service = UserService(session)
 
-    # Получаем пользователя по ID
     user = await user_service.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -74,30 +69,23 @@ async def update_user(
     
     update_data = request.dict(exclude_unset=True)
     
-    # Обработка загрузки файла
     if photo_file:
         try:
-            # Сохраняем файл
             file_name = await UserService.save_uploaded_file(photo_file)
-            # Обновляем поле PhotoURL в данных для обновления
-            update_data["PhotoURL"] = file_name
-            
-            # Формируем полный URL для ответа
-            photo_url = f"http://212.20.53.169:13299/uploads/{file_name}"
+            # Сохраняем полный URL в базу данных
+            full_photo_url = f"http://212.20.53.169:13299/uploads/{file_name}"
+            update_data["PhotoURL"] = full_photo_url
         except Exception as e:
             return JSONResponse(
                 status_code=500,
                 content={"message": f"Ошибка при загрузке файла: {str(e)}"}
             )
-    else:
-        photo_url = None
     
-    # Обновляем данные пользователя
     user = await user_service.update_profile(user_id, update_data)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     return {
         "message": "User updated successfully",
-        "photo_url": photo_url
+        "user": user
     }
