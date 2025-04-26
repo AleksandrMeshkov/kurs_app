@@ -9,6 +9,11 @@ from app.security.jwttype import JWTType
 from app.schemas.request.users.user_registration_schema import UserRegistration
 from app.schemas.request.users.user_update_schema import UserUpdate
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import UploadFile, File
+import os
+import uuid
+from fastapi.responses import JSONResponse
+
 
 router = APIRouter()
 
@@ -58,16 +63,34 @@ async def get_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+
+
 @router.put("/users/{user_id}")
 async def update_user(
     user_id: int,
-    request: UserUpdate,  # Принимаем данные в виде объекта UserUpdate
+    request: UserUpdate = Depends(),
+    photo: UploadFile = File(None),
     session: AsyncSession = Depends(get_session)
 ):
     user_service = UserService(session)
-
+    
+    # Если передано изображение, сохраняем его
+    if photo:
+        try:
+            file_name = await UserService.save_uploaded_file(photo)
+            request.PhotoURL = file_name
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Ошибка при загрузке файла: {str(e)}"}
+            )
+    
     # Обновляем данные пользователя
     user = await user_service.update_profile(user_id, request)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"message": "User updated successfully"}
+    
+    return {
+        "message": "User updated successfully",
+        "photo_url": f"http://212.20.53.169:13299/uploads/{user.PhotoURL}" if user.PhotoURL else None
+    }

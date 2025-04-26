@@ -7,8 +7,10 @@ from app.database.database import *
 from app.security.hasher import hash_password
 from app.security.hasher import verify_password
 from sqlalchemy import select, insert, update
-from fastapi import HTTPException
-
+from fastapi import HTTPException, UploadFile
+import os
+import uuid
+from fastapi.responses import JSONResponse
 class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -125,3 +127,19 @@ class UserService:
         if not verify_password(PasswordHash, user.PasswordHash):
             return "Invalid password"
         return user
+    
+    async def save_uploaded_file(file: UploadFile, upload_dir: str = "uploads"):
+    # Создаем директорию, если она не существует
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir)
+    
+    # Генерируем уникальное имя файла
+        file_ext = file.filename.split(".")[-1]
+        file_name = f"{uuid.uuid4()}.{file_ext}"
+        file_path = os.path.join(upload_dir, file_name)
+    
+    # Сохраняем файл
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+    
+        return file_name
