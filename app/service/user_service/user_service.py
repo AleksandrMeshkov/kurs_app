@@ -44,11 +44,6 @@ class UserService:
         if existing_user_by_email:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
-        # Если при регистрации передается PhotoURL, оставляем как есть
-        photo_url = request.PhotoURL
-        if photo_url and not photo_url.startswith(('http://', 'https://')):
-            photo_url = f"http://212.20.53.169:13299/uploads/{photo_url}"
-
         query = (
             insert(User)
             .values(
@@ -60,7 +55,7 @@ class UserService:
                 Patronymic=request.Patronymic,
                 City=request.City,
                 Phone=request.Phone,
-                PhotoURL=photo_url
+                PhotoURL=request.PhotoURL  # Оставляем как есть, если передается
             )
             .returning(User)
         )
@@ -84,7 +79,8 @@ class UserService:
             try:
                 file_name = await self.save_uploaded_file(photo_file)
                 # Сохраняем полный URL в базу данных
-                data['PhotoURL'] = f"http://212.20.53.169:13299/uploads/{file_name}"
+                full_photo_url = f"http://212.20.53.169:13299/uploads/{file_name}"
+                data['PhotoURL'] = full_photo_url
             except HTTPException as e:
                 raise e
             except Exception as e:
