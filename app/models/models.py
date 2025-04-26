@@ -1,6 +1,7 @@
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column, relationship
 from sqlalchemy import Integer, String, Float, DateTime, Time, Boolean, Text, ForeignKey
-from datetime import time, datetime
+from datetime import time, date
+
 
 Base = declarative_base()
 
@@ -29,8 +30,8 @@ class Event(Base):
     PlatformID: Mapped[int] = mapped_column(Integer, ForeignKey("Platforms.PlatformID"), nullable=False)
     Name: Mapped[str] = mapped_column(String(255), nullable=False)
     City: Mapped[str] = mapped_column(String(255), nullable=True)
-    DateStart: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    DateEnd: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    DateStart: Mapped[date] = mapped_column(DateTime, nullable=True)
+    DateEnd: Mapped[date] = mapped_column(DateTime, nullable=True)
     TimeStart: Mapped[time] = mapped_column(Time, nullable=True)  # Используем тип time
     TimeEnd: Mapped[time] = mapped_column(Time, nullable=True)    # Используем тип time
     Description: Mapped[str] = mapped_column(String(500), nullable=True)
