@@ -10,7 +10,6 @@ class UserUpdate(BaseModel):
     Patronymic: Optional[str] = None
     City: Optional[str] = None
     Phone: Optional[str] = None
-    PhotoURL: Optional[str] = None
     
     class Config:
         arbitrary_types_allowed = True

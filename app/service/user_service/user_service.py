@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict, Any
 from app.models.models import User
 from app.schemas.request.users.user_auth_schema import UserAuth
 from app.schemas.request.users.user_registration_schema import UserRegistration
@@ -11,6 +11,8 @@ from fastapi import HTTPException, UploadFile
 import os
 import uuid
 from fastapi.responses import JSONResponse
+from pathlib import Path
+
 class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -21,31 +23,23 @@ class UserService:
         return result.scalars().first()
 
     async def get_user_by_login(self, login: str) -> Union[User, None]:
-        """
-        Получить пользователя по логину.
-        """
+        """Получить пользователя по логину."""
         query = select(User).where(User.Login == login)
         result = await self.session.execute(query)
         return result.scalars().first()
 
     async def get_user_by_id(self, user_id: int) -> Union[User, None]:
-        """
-        Получить пользователя по ID.
-        """
+        """Получить пользователя по ID."""
         query = select(User).where(User.UserID == user_id)
         result = await self.session.execute(query)
         return result.scalars().first()
 
     async def register(self, request: UserRegistration):
-        """
-        Регистрация нового пользователя.
-        """
-        # Проверяем, существует ли пользователь с таким логином
+        """Регистрация нового пользователя."""
         existing_user_by_login = await self.get_user_by_login(request.Login)
         if existing_user_by_login:
             raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
 
-        # Проверяем, существует ли пользователь с таким email
         existing_user_by_email = await self.get_profile(Email=request.Email)
         if existing_user_by_email:
             raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
@@ -55,15 +49,13 @@ class UserService:
             .values(
                 Login=request.Login,
                 Email=request.Email,
-                PasswordHash=hash_password(request.PasswordHash),  # Хэшируем пароль
+                PasswordHash=hash_password(request.PasswordHash),
                 Name=request.Name,
                 Surname=request.Surname,
                 Patronymic=request.Patronymic,
                 City=request.City,
                 Phone=request.Phone,
-                PhotoURL =request.PhotoURL
-    
-
+                PhotoURL=request.PhotoURL
             )
             .returning(User)
         )
@@ -76,26 +68,23 @@ class UserService:
             await self.session.rollback()
             raise HTTPException(status_code=500, detail=f"Ошибка при регистрации пользователя: {str(e)}")
 
-    async def update_profile(self, UserID: int, data: UserUpdate):
-        """
-        Обновление профиля пользователя.
-        """
-        # Проверяем, существует ли пользователь
+    async def update_profile(self, UserID: int, data: Dict[str, Any]):
+        """Обновление профиля пользователя."""
         existing_user = await self.get_user_by_id(UserID)
         if not existing_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        data_dict = data.dict(exclude_unset=True)
+        # Если передается пароль, хэшируем его
+        if 'Password' in data and data['Password'] is not None:
+            data['PasswordHash'] = hash_password(data['Password'])
+            del data['Password']
 
-        update_fields = {}
-        for key, value in data_dict.items():
-            if value is not None:
-                update_fields[key] = value
+        update_fields = {k: v for k, v in data.items() if v is not None}
 
         if not update_fields:
-            return None
+            return existing_user  # Возвращаем неизмененного пользователя
 
-        query = update(User).where(User.UserID == UserID).values(update_fields).returning(User)
+        query = update(User).where(User.UserID == UserID).values(**update_fields).returning(User)
         
         try:
             result = await self.session.execute(query)
@@ -106,9 +95,7 @@ class UserService:
             raise HTTPException(status_code=500, detail=f"Ошибка при обновлении профиля: {str(e)}")
 
     async def authorize(self, Login: str, PasswordHash: str):
-        """
-        Авторизация пользователя.
-        """
+        """Авторизация пользователя."""
         authenticated = await self.authenticate_user(Login, PasswordHash)
         if isinstance(authenticated, str):
             raise HTTPException(
@@ -118,9 +105,7 @@ class UserService:
         return authenticated
 
     async def authenticate_user(self, Login: str, PasswordHash: str) -> Union[User, str]:
-        """
-        Аутентификация пользователя.
-        """
+        """Аутентификация пользователя."""
         user = await self.get_user_by_login(Login)
         if not user:
             return "User not found"
@@ -128,18 +113,25 @@ class UserService:
             return "Invalid password"
         return user
     
-    async def save_uploaded_file(file: UploadFile, upload_dir: str = "uploads"):
-    # Создаем директорию, если она не существует
-        if not os.path.exists(upload_dir):
-            os.makedirs(upload_dir)
-    
-    # Генерируем уникальное имя файла
-        file_ext = file.filename.split(".")[-1]
-        file_name = f"{uuid.uuid4()}.{file_ext}"
-        file_path = os.path.join(upload_dir, file_name)
-    
-    # Сохраняем файл
-        with open(file_path, "wb") as buffer:
-            buffer.write(await file.read())
-    
-        return file_name
+    @staticmethod
+    async def save_uploaded_file(file: UploadFile, upload_dir: str = "uploads") -> str:
+        """Сохраняет загруженный файл в указанную директорию."""
+        # Проверяем и создаем директорию при необходимости
+        Path(upload_dir).mkdir(parents=True, exist_ok=True)
+        
+        # Генерируем уникальное имя файла с сохранением расширения
+        file_ext = Path(file.filename).suffix if file.filename else ""
+        file_name = f"{uuid.uuid4()}{file_ext}"
+        file_path = Path(upload_dir) / file_name
+        
+        # Сохраняем файл
+        try:
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            return file_name
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка при сохранении файла: {str(e)}"
+            )

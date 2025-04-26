@@ -63,30 +63,32 @@ async def get_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-
-
 @router.put("/users/{user_id}")
 async def update_user(
     user_id: int,
     request: UserUpdate = Depends(),
-    photo: UploadFile = File(None),
+    photo_url: UploadFile = File(None, alias="PhotoURL"),  # Изменено имя параметра на PhotoURL
     session: AsyncSession = Depends(get_session)
 ):
     user_service = UserService(session)
     
     # Если передано изображение, сохраняем его
-    if photo:
+    if photo_url:
         try:
-            file_name = await UserService.save_uploaded_file(photo)
-            request.PhotoURL = file_name
+            file_name = await UserService.save_uploaded_file(photo_url)
+            # Создаем словарь с обновленными данными
+            update_data = request.dict(exclude_unset=True)
+            update_data["PhotoURL"] = file_name
         except Exception as e:
             return JSONResponse(
                 status_code=500,
                 content={"message": f"Ошибка при загрузке файла: {str(e)}"}
             )
+    else:
+        update_data = request.dict(exclude_unset=True)
     
     # Обновляем данные пользователя
-    user = await user_service.update_profile(user_id, request)
+    user = await user_service.update_profile(user_id, update_data)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
